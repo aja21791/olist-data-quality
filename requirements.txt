@@ -1,0 +1,10 @@
+# Alternativa a environment.yml: pip install -r requirements.txt
+# Utilizar Python 3.12. Probado sintácticamente, pendiente de instalación en Windows.
+duckdb==2.0.0
+pandas>=2.2,<3.0
+pyarrow>=18,<25
+matplotlib>=3.8,<4.0
+jupyterlab>=4.2,<5.0
+ipykernel>=6.29,<8.0
+pytest>=8,<10
+kaggle>=1.7,<3.0

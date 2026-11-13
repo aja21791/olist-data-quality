@@ -1,0 +1,25 @@
+# Datos descargados y generados, nunca subir a Git por accidente.
+data/raw/*
+!data/raw/.gitkeep
+data/clean/*
+!data/clean/.gitkeep
+data/quarantine/*
+!data/quarantine/.gitkeep
+database/*.duckdb*
+reports/quality_reports/*
+!reports/quality_reports/.gitkeep
+reports/figures/*
+!reports/figures/.gitkeep
+reports/data_dictionary/*
+!reports/data_dictionary/.gitkeep
+# Entornos, cachés, secretos y notebooks
+.env
+.venv/
+.ipynb_checkpoints/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.kaggle/
+kaggle.json
+access_token
+.DS_Store

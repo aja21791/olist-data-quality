@@ -1,0 +1,10 @@
+flowchart TD
+  A[CSV originales inmutables] --> B[Extracción Python + DuckDB]
+  B --> C[(Esquema RAW)]
+  C --> D[15 reglas SQL + orquestación Python]
+  D --> E[(Esquema CLEAN)]
+  D -. Incidencias .-> Q[Auditoría y cuarentena]
+  E --> T{Pruebas críticas PASS?}
+  T -->|Sí| X[Exportar Parquet y verificar]
+  T -->|No| F[Registrar FAIL y bloquear publicación]
+  X --> R[Reporte final de calidad]
