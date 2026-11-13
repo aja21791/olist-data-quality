@@ -1,6 +1,6 @@
 # Olist Data Quality — SQL + DuckDB + Python
 
-Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado actual: Fase 1 (preparación).** Este repositorio **no afirma** tener aún las 15 reglas implementadas ni el conjunto Olist procesado. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
+Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 y 2 (preparación, extracción a RAW y perfilado).** Este repositorio **no afirma** tener aún las 15 reglas implementadas ni el conjunto Olist procesado. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
 
 ## Objetivo y alcance
 
@@ -16,7 +16,7 @@ No hay capa persistente STAGING. Las futuras etapas de transformación podrán u
 
 ## Guía paso a paso
 
-**Leer primero:** [`docs/FASE_1_TUTORIAL.md`](docs/FASE_1_TUTORIAL.md). Incluye nueve pasos guiados, comprobaciones, errores frecuentes y comandos exactos para Windows 11.
+**Fase 1:** [`docs/FASE_1_TUTORIAL.md`](docs/FASE_1_TUTORIAL.md) (instalación de Windows 11). **Fase 2:** [`docs/FASE_2_TUTORIAL.md`](docs/FASE_2_TUTORIAL.md) (comprensión de datos, carga RAW y diagnóstico).
 
 ### Inicio rápido (Miniconda Prompt, desde la carpeta del proyecto)
 
@@ -30,6 +30,8 @@ kaggle auth login
 kaggle datasets download olistbr/brazilian-ecommerce -p data/raw --unzip
 python -m src.source_inventory
 python -m src.verify_setup --require-data
+python -m src.extract            # Fase 2: CSV -> RAW, sin limpiar
+python -m src.understand         # Fase 2: diccionario + diagnóstico RAW
 python -m pytest -q tests
 ```
 
@@ -49,12 +51,15 @@ Abrir VS Code con `code .`; seleccionar el intérprete `olist-quality` y el kern
 | `src/bootstrap.py` | Inicializar base y esquemas sin borrar datos |
 | `src/source_inventory.py` | Perfilado inicial: cabeceras, conteos, problemas estructurales, SHA-256 |
 | `src/verify_setup.py` | Validación de instalación y archivos |
-| `notebooks/01_data_quality_etl.ipynb` | Notebook educativo, iniciado en Fase 1 |
-| `sql/profiling/` | Consultas SQL de diagnóstico, por construir |
+| `src/model_metadata.py` | Hipótesis de claves, relaciones y granularidad que se verifican contra RAW |
+| `src/extract.py` | Carga transaccional, idempotente, a RAW sin modificar CSV |
+| `src/understand.py` | Perfilado de claves, referencias, vacíos, tipos, fechas y montos de RAW |
+| `notebooks/01_data_quality_etl.ipynb` | Notebook educativo con Fases 1 y 2; todo se ejecuta desde la primera celda |
+| `sql/profiling/` | Consultas SQL educativas de la Fase 2 |
 | `sql/transformations/` | 15 reglas SQL, por construir |
 | `sql/validations/` | Pruebas SQL sobre CLEAN, por construir |
 | `reports/quality_reports/` | Inventario de fuentes ahora; métricas comparativas después |
-| `reports/data_dictionary/` | Diccionario derivado de datos reales, por construir |
+| `reports/data_dictionary/` | Diccionario y ER generados desde RAW en Fase 2 |
 | `tests/` | Pruebas automatizadas de los componentes ya implementados |
 | `docs/architecture.mmd` | Diagrama Mermaid del pipeline obligatorio |
 
@@ -62,7 +67,7 @@ Abrir VS Code con `code .`; seleccionar el intérprete `olist-quality` y el kern
 
 01 Duplicados · 02 Nulos · 03 Texto · 04 Conversión de tipos · 05 Fechas · 06 Precios · 07 Outliers · 08 Categorías · 09 Integridad referencial · 10 Estados del pedido · 11 Prefijos postales · 12 Pagos · 13 Métodos de pago · 14 Cadenas vacías · 15 Validación final.
 
-Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transformación hacia CLEAN, auditoría, prueba y análisis de excepciones. **Todavía no se consideran implementadas por este paquete de Fase 1.**
+Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transformación hacia CLEAN, auditoría, prueba y análisis de excepciones. **Todavía no se consideran implementadas por este paquete de Fase 2.**
 
 ## Dataset
 
@@ -82,4 +87,4 @@ Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transforma
 
 ## Limitaciones de esta entrega
 
-La Fase 1 habilita el entorno, la base y el inventario, pero **no** carga tablas RAW, no construye CLEAN, no aplica las 15 reglas y no publica Parquet. Esto evita representar como completado un pipeline que todavía no ha procesado datos reales. El diseño del repositorio conserva las rutas de los entregables posteriores.
+El paquete incluye el **código de Fase 2** para cargar RAW, generar diccionario y reportes de perfilado. Su ejecución sobre Olist real **depende de los CSV que descargues localmente**. No se han generado aquí cifras del dataset ni se afirma que tu base local esté cargada. CLEAN sigue pendiente, no se aplican todavía las 15 reglas y no se publican Parquet. Los scripts y la prueba de carga con datos sintéticos deben ejecutarse en tu entorno DuckDB.
