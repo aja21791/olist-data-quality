@@ -70,7 +70,22 @@ python -m pytest -q tests/test_phase5.py
 Antes de ejecutar el módulo de validación, puedes comprobar las tablas:
 
 ```powershell
-python -c "import duckdb; con=duckdb.connect('database/ecommerce.duckdb',read_only=True); print(con.execute(\"SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('raw','clean','audit') ORDER BY 1,2\").fetchall()); con.close()"
+@'
+import duckdb
+
+con = duckdb.connect("database/ecommerce.duckdb", read_only=True)
+
+result = con.execute("""
+    SELECT table_schema, table_name
+    FROM information_schema.tables
+    WHERE table_schema IN ('raw', 'clean', 'audit')
+    ORDER BY 1, 2
+""").fetchall()
+
+print(result)
+
+con.close()
+'@ | python -
 ```
 
 **5. Explicación.** La prueba abre DuckDB en modo lectura para consultar su catálogo. El esquema `raw` contiene originales; `clean` contiene datos transformados; `audit` contiene historial y excepciones.
