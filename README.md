@@ -1,6 +1,6 @@
 # Olist Data Quality — SQL + DuckDB + Python
 
-Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1, 2 y 3 (preparación, extracción a RAW y diagnóstico integral inicial).** Este repositorio **no afirma** tener aún las 15 reglas implementadas ni el conjunto Olist procesado. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
+Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 a 5 (entorno, RAW, diagnóstico, transformación a CLEAN y validación formal con auditoría).** Las quince reglas están implementadas como SQL y orquestación Python. La ejecución de las pruebas sobre los CSV reales debe verificarse localmente; los reportes suministrados se generan desde la base de cada usuario. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
 
 ## Objetivo y alcance
 
@@ -16,7 +16,7 @@ No hay capa persistente STAGING. Las futuras etapas de transformación podrán u
 
 ## Guía paso a paso
 
-**Fase 1:** [`docs/FASE_1_TUTORIAL.md`](docs/FASE_1_TUTORIAL.md) (instalación de Windows 11). **Fase 2:** [`docs/FASE_2_TUTORIAL.md`](docs/FASE_2_TUTORIAL.md) (comprensión de datos y carga RAW). **Fase 3:** [`docs/FASE_3_TUTORIAL.md`](docs/FASE_3_TUTORIAL.md) (diagnóstico integral, reporte inicial y gráficos).
+**Fase 1:** [`docs/FASE_1_TUTORIAL.md`](docs/FASE_1_TUTORIAL.md) (instalación de Windows 11). **Fase 2:** [`docs/FASE_2_TUTORIAL.md`](docs/FASE_2_TUTORIAL.md) (comprensión de datos y carga RAW). **Fase 3:** [`docs/FASE_3_TUTORIAL.md`](docs/FASE_3_TUTORIAL.md) (diagnóstico integral, reporte inicial y gráficos). **Fase 4:** [`docs/FASE_4_TUTORIAL.md`](docs/FASE_4_TUTORIAL.md) (15 reglas, CLEAN, cuarentena y auditoría). **Fase 5:** [`docs/FASE_5_TUTORIAL.md`](docs/FASE_5_TUTORIAL.md) (validación formal, severidades, bloqueo y auditoría).
 
 ### Inicio rápido (Miniconda Prompt, desde la carpeta del proyecto)
 
@@ -33,6 +33,8 @@ python -m src.verify_setup --require-data
 python -m src.extract            # Fase 2: CSV -> RAW, sin limpiar
 python -m src.understand         # Fase 2: diccionario + exploración de RAW
 python -m src.diagnose           # Fase 3: diagnóstico integral, CSV + gráficos + reporte inicial
+python -m src.transform          # Fase 4: 15 reglas RAW -> CLEAN, SIN publicar Parquet
+python -m src.validate           # Fase 5: pruebas formales, bloquea con FAIL crítico
 python -m pytest -q tests
 ```
 
@@ -56,10 +58,14 @@ Abrir VS Code con `code .`; seleccionar el intérprete `olist-quality` y el kern
 | `src/extract.py` | Carga transaccional, idempotente, a RAW sin modificar CSV |
 | `src/understand.py` | Exploración inicial de claves, referencias, vacíos, tipos, fechas y montos de RAW |
 | `src/diagnose.py` | Fase 3: diagnóstico integral de 15 temas, solo lectura y generación del reporte inicial |
-| `notebooks/01_data_quality_etl.ipynb` | Notebook educativo con Fases 1, 2 y 3; ejecutable en orden |
+| `src/transform.py` | Fase 4: ejecuta reglas SQL y construye CLEAN bajo una transacción |
+| `src/transform_schema.py` | Metadatos de tipos y claves verificados contra RAW |
+| `src/validate.py` | Fase 5: controles SQL, gate PASS/WARNING/FAIL, auditoría e informes |
+| `notebooks/01_data_quality_etl.ipynb` | Notebook educativo con Fases 1 a 5; ejecutable en orden |
 | `sql/profiling/` | Consultas SQL de Fases 2 y 3 (duplicados, IQR, fechas, conciliación, estados, postales) |
-| `sql/transformations/` | 15 reglas SQL, por construir |
-| `sql/validations/` | Pruebas SQL sobre CLEAN, por construir |
+| `sql/transformations/tables/` | 9 transformaciones SQL de RAW a CLEAN |
+| `sql/transformations/rules/` | 15 consultas SQL reales de auditoría/calidad |
+| `sql/validations/` | Pruebas SQL versionadas sobre CLEAN (Fase 5) |
 | `reports/quality_reports/` | Inventario de fuentes ahora; métricas comparativas después |
 | `reports/data_dictionary/` | Diccionario y ER generados desde RAW en Fase 2 |
 | `tests/` | Pruebas automatizadas de los componentes ya implementados |
@@ -69,7 +75,7 @@ Abrir VS Code con `code .`; seleccionar el intérprete `olist-quality` y el kern
 
 01 Duplicados · 02 Nulos · 03 Texto · 04 Conversión de tipos · 05 Fechas · 06 Precios · 07 Outliers · 08 Categorías · 09 Integridad referencial · 10 Estados del pedido · 11 Prefijos postales · 12 Pagos · 13 Métodos de pago · 14 Cadenas vacías · 15 Validación final.
 
-Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transformación hacia CLEAN, auditoría, prueba y análisis de excepciones. **Todavía no se consideran implementadas por este paquete de Fase 2.**
+Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transformación hacia CLEAN, auditoría, prueba y análisis de excepciones. **Implementadas en Fase 4; consulta el tutorial para políticas y validaciones.**
 
 ## Dataset
 
@@ -89,7 +95,7 @@ Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transforma
 
 ## Limitaciones de esta entrega
 
-El paquete incluye el **código de Fases 1, 2 y 3** para cargar RAW, generar diccionario y diagnósticos integrales de calidad. Su ejecución sobre Olist real **depende de los CSV que descargues localmente**. No se han generado aquí cifras del dataset ni se afirma que tu base local esté cargada. El reporte de Fase 3 es el diagnóstico INICIAL, no el reporte final de calidad. CLEAN sigue pendiente, no se aplican todavía las 15 reglas y no se publican Parquet. Los scripts y la prueba de carga con datos sintéticos deben ejecutarse en tu entorno DuckDB.
+El paquete incluye el **código de Fases 1, 2 y 3** para cargar RAW, generar diccionario y diagnósticos integrales de calidad. Su ejecución sobre Olist real **depende de los CSV que descargues localmente**. No se han generado aquí cifras del dataset ni se afirma que tu base local esté cargada. El reporte de Fase 3 es el diagnóstico INICIAL, no el reporte final de calidad. CLEAN puede construirse con `src.transform` usando SQL; no hay Parquet ni reporte final hasta superar las pruebas formales y la fase de publicación. Los scripts y la prueba de carga con datos sintéticos deben ejecutarse en tu entorno DuckDB.
 
 
 ## Fase 3: entregables del diagnóstico inicial
@@ -97,3 +103,43 @@ El paquete incluye el **código de Fases 1, 2 y 3** para cargar RAW, generar dic
 Después de `python -m src.diagnose`, revisar `reports/quality_reports/phase3_quality_report.md`, `phase3_issues.csv`, `phase3_kpis.csv`, `phase3_payment_summary.csv`, `phase3_outliers.csv`, `phase3_references.csv` y gráficos `reports/figures/phase3_*.png`. Cada tabla de métricas queda también en `phase3_*.csv`; `phase3_summary.json` consolida el resultado. No hay tablas modificadas ni tercera capa de datos.
 
 Si se produce un error gráfico, ejecutar `python -m src.diagnose --no-figures`. Las pruebas de Fase 3 usan datos sintéticos y no requieren Olist real.
+
+
+## Fase 4: uso y entregables
+
+```powershell
+conda activate olist-quality
+python -m src.transform
+python -m pytest -q tests
+```
+
+El proyecto reconstruye CLEAN transaccionalmente, sin tocar RAW, y conserva el historial de auditoría. Las tablas auxiliares temporales no crean STAGING persistente. Revisar:
+
+- `reports/quality_reports/phase4_transformation_report.md`
+- `reports/quality_reports/phase4_clean_overview.csv`
+- `reports/quality_reports/phase4_rule_results.csv`
+- `reports/quality_reports/phase4_quarantine_summary.csv`
+- `audit.transform_runs`, `audit.rule_results`, `audit.quarantine_records`
+
+**Advertencia de integridad:** se permiten excepciones no solucionables sin fuente externa y se registran como WARNING; la Fase 5 define reglas críticas de publicación. Las pruebas locales de DuckDB deben ejecutarse en el entorno del estudiante.
+
+
+## Fase 5: validación formal de calidad (sin publicación Parquet)
+
+```powershell
+conda activate olist-quality
+python -m src.validate
+python -m pytest -q tests/test_phase5.py
+python -m pytest -q tests
+```
+
+El validador utiliza `sql/validations/*.sql` y `src/transform_schema.py`; verifica tablas, tipos, unicidad, campos obligatorios, integridad referencial, cronología, valores monetarios, dominios, prefijos, estados y conciliación de pagos. La Fase 5 sólo **lee** `raw.*` y `clean.*`; añade resultados históricos a `audit.validation_runs` y `audit.validation_results`. Exporta informes en:
+
+- `reports/quality_reports/phase5_validation_report.md`
+- `reports/quality_reports/phase5_validation_results.csv`
+- `reports/quality_reports/phase5_validation_summary.json`
+- `reports/quality_reports/phase5_payment_exceptions.csv`
+
+Los resultados son `PASS` (sin incumplimientos), `WARNING` (pendiente de revisión sin bloqueo) y `FAIL` (incumplimiento crítico). Con fallos críticos, el módulo devuelve código 1 y el estado `BLOCKED`. **No exporta Parquet; tampoco borra ni edita registros para conseguir PASS.** Los fallos críticos deben investigarse antes de la publicación de la Fase 7.
+
+El tutorial completo explica cada paso: `docs/FASE_5_TUTORIAL.md`. El notebook integra las mismas funciones para evitar duplicar lógica. En este paquete no se incluyen resultados reales de Olist; deben calcularse en la base DuckDB local.

@@ -1,0 +1,32 @@
+Parche de Fase 4 (DuckDB): _classified_{table}
+
+El error Catalog Error: Table with name _classified_ does not exist
+se debe a concatenar un prefijo con un identificador ya entrecomillado:
+_classified_"orders" en vez de "_classified_orders".
+
+1) Cerrar la ejecución del pipeline.
+2) Respaldar src/transform.py y, opcionalmente, database/ecommerce.duckdb.
+3) Copiar TODO el contenido de este ZIP en la raíz de olist-data-quality,
+   manteniendo las carpetas (src/, sql/, tests/) y aceptar sobrescritura.
+4) No borrar ni reemplazar data/raw ni database/ecommerce.duckdb.
+5) En la terminal VS Code, desde la raíz del proyecto, ejecutar:
+   conda activate olist-quality
+   python -m pytest -q tests/test_phase4.py
+   python -m src.transform
+   python -m pytest -q tests
+
+Se cambian estos archivos:
+- src/transform.py
+- sql/transformations/rules/02_nulos.sql
+- sql/transformations/rules/03_texto.sql
+- sql/transformations/rules/04_tipos.sql
+- tests/test_phase4.py (incluye pruebas de regresión)
+
+Los 9 mensajes "CLEAN creado" solo indican ejecuciones intermedias.
+El proceso confirma el éxito con el estado COMPLETED y el reporte final.
+
+Comprobaciones realizadas en entorno sin DuckDB:
+- Compilación de los archivos Python.
+- 12 pruebas exitosas, 6 omitidas (las omitidas requieren DuckDB).
+- Pruebas de sustitución de identificadores SQL.
+El proceso completo aún debe probarse en el entorno local con DuckDB y Olist.
