@@ -307,7 +307,8 @@ def _payments(con, cols, max_rows: int = 100):
                SUM(ABS(difference)) AS absolute_difference_sum,
                MAX(ABS(difference)) AS maximum_absolute_difference
         FROM ({query}) r
-        GROUP BY reconciliation_status ORDER BY orders DESC
+        GROUP BY reconciliation_status
+        ORDER BY orders DESC, reconciliation_status ASC
     ''')
     details = query_dicts(con, f'''
         SELECT order_id, item_rows, payment_rows, item_price, freight, paid,

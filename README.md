@@ -143,3 +143,23 @@ El validador utiliza `sql/validations/*.sql` y `src/transform_schema.py`; verifi
 Los resultados son `PASS` (sin incumplimientos), `WARNING` (pendiente de revisión sin bloqueo) y `FAIL` (incumplimiento crítico). Con fallos críticos, el módulo devuelve código 1 y el estado `BLOCKED`. **No exporta Parquet; tampoco borra ni edita registros para conseguir PASS.** Los fallos críticos deben investigarse antes de la publicación de la Fase 7.
 
 El tutorial completo explica cada paso: `docs/FASE_5_TUTORIAL.md`. El notebook integra las mismas funciones para evitar duplicar lógica. En este paquete no se incluyen resultados reales de Olist; deben calcularse en la base DuckDB local.
+
+## Fase 6 — Orquestación y gestión verificable de excepciones
+
+La secuencia integra Fases 2–5 en una ejecución: CSV originales → extracción Python + DuckDB → RAW → diagnóstico inicial → 15 reglas SQL → CLEAN → pruebas formales → conciliación de excepciones → dictamen. **No existe STAGING persistente ni se generan Parquet en esta fase.**
+
+```powershell
+conda activate olist-quality
+python -m pytest -q tests/test_phase6.py
+python -m src.pipeline --no-figures
+# Revalidar un CSV de revisión SIN volver a importar ni transformar:
+python -m src.pipeline --validate-only
+```
+
+Códigos de salida: `0` candidato evaluado sin bloqueo en la puerta de Fase 6 (aún sin publicar), `2` BLOCKED por calidad, `1` error técnico.
+
+Los hallazgos reales aportados por el usuario para la Fase 5 (13/11/2026) fueron 166 eventos `carrier_before_purchase`, 23 `delivery_before_carrier`, siete advertencias y resultado original `BLOCKED`. **No se ha aprobado ninguna de las 189 anomalías**. Un registro de revisión se crea automáticamente con estado `PENDIENTE` si no existe, en `reports/quality_reports/phase5_temporal_review_register.csv`; si ya existe, nunca se sobrescribe. Se exige constancia documental, responsable, fecha ISO con zona horaria y coincidencia de los eventos actuales antes de contabilizar aprobaciones válidas.
+
+La puerta de Fase 6 distingue los `FAIL` originales de Fase 5 del posible dictamen preparatorio `READY_FOR_PHASE7_WITH_EXCEPTIONS`. Este último no cambia el resultado original, no corrige timestamps y no implica que las fuentes externas se hayan verificado: solamente permitiría estudiar la publicación en Fase 7, donde todavía harán falta los controles finales.
+
+Los registros de ejecución y decisiones se almacenan en `audit.pipeline_runs`, `audit.pipeline_steps` y `audit.temporal_review_assessments`. Las salidas están en `reports/quality_reports/phase6_*`. **Guía integral:** `docs/FASE_6_TUTORIAL.md`.

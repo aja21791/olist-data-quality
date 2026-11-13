@@ -1,0 +1,24 @@
+OLIST DATA QUALITY | PARCHE FASE 6
+
+INSTRUCCIONES DE INSTALACIÓN
+1. Haz copia de database/ecommerce.duckdb y del notebook si contiene resultados propios.
+2. Extrae el contenido de ESTE ZIP dentro de la carpeta olist-data-quality.
+   En la raíz debe quedar src/pipeline.py; NO en una carpeta adicional.
+3. El parche añade los archivos del pipeline, reglas SQL, guía, pruebas y notebook.
+   Sobrescribe README.md y notebooks/01_data_quality_etl.ipynb sólo si aceptas
+   incorporar la nueva sección (o fusiona los cambios manualmente).
+4. No incluye los CSV, la BD ni registros de revisión humana. Los datos se conservan.
+
+COMANDOS POWER SHELL desde olist-data-quality:
+  conda activate olist-quality
+  python -m pytest -q tests/test_phase6.py
+  python -m src.pipeline --validate-only
+  python -m src.pipeline --no-figures
+
+RESULTADO ESPERADO CON LOS ARCHIVOS DE FASE5 QUE COMPARTISTE
+  BLOCKED: 2 controles críticos con 189 eventos temporales pendientes.
+  Esto NO es un error técnico: salida 2 = gate bloqueado.
+  La Fase 6 no exporta archivos Parquet.
+
+Revisar docs/FASE_6_TUTORIAL.md y
+reports/quality_reports/phase6_pipeline_report.md después de ejecutar.

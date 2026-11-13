@@ -41,6 +41,11 @@ def test_phase3_diagnosis_is_read_only_and_reproducible(tmp_path):
     # Dos artículos y dos pagos: deben sumarse por separado, no formar 4 cruces.
     matched=[r for r in results['payment_summary'] if r['reconciliation_status']=='MATCHED']
     assert matched and matched[0]['orders']==1
+    # Orden estable incluso cuando varias categorías tienen el mismo conteo.
+    assert results['payment_summary'] == sorted(
+        results['payment_summary'],
+        key=lambda row: (-row['orders'], row['reconciliation_status'])
+    )
     assert results['references'][0]['orphan_rows']==0
     assert (tmp_path/'reports'/'phase3_quality_report.md').is_file()
     assert (tmp_path/'reports'/'phase3_summary.json').is_file()
