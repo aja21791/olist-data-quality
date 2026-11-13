@@ -20,6 +20,7 @@ from uuid import uuid4
 from .config import DB_PATH, QUALITY_REPORTS_DIR, ROOT_DIR
 from .extract import qi
 from .model_metadata import RELATIONSHIPS
+from .temporal_policy import get_temporal_policy_state
 from .transform_schema import (
     SCHEMA, KEYS, REQUIRED, TIMESTAMPS, MONEYS, INTEGERS,
     DOUBLES, ZIP_FIELDS,
@@ -339,6 +340,14 @@ def validate_clean(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR) -> dict:
                 add(f'V09.TIME.{name}', 'R05', 'orders', 'CRITICAL',
                     count_predicate('orders', predicate), total_orders,
                     'Secuencia temporal imposible; revisar la fuente, no fabricar fechas')
+            policy_state = get_temporal_policy_state(con, last_transform_id)
+            add('V09.TEMPORAL_POLICY_AUDIT', 'R05', 'orders', 'CRITICAL',
+                policy_state['violations'], total_orders,
+                policy_state['reason'])
+            add('V09.TEMPORAL_SOURCE_FLAGGED', 'R05', 'orders', 'WARNING',
+                policy_state['events'], total_orders,
+                'Anomalías originales preservadas en AUDIT; timestamps de transportista '
+                'marcados como no verificables en CLEAN. No afirmar que los valores RAW sean correctos.')
             statuses = ','.join("'"+x+"'" for x in ORDER_STATUSES)
             for code, pred in (
                 ('unknown', f'order_status IS NULL OR order_status NOT IN ({statuses})'),

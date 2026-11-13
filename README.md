@@ -1,6 +1,24 @@
 # Olist Data Quality — SQL + DuckDB + Python
 
-Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 a 5 (entorno, RAW, diagnóstico, transformación a CLEAN y validación formal con auditoría).** Las quince reglas están implementadas como SQL y orquestación Python. La ejecución de las pruebas sobre los CSV reales debe verificarse localmente; los reportes suministrados se generan desde la base de cada usuario. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
+Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 a 7, con política R05 de timestamps logísticos no verificables y publicación Parquet condicionada a validaciones críticas.** Las quince reglas están implementadas como SQL y orquestación Python. La ejecución de las pruebas sobre los CSV reales debe verificarse localmente; los reportes suministrados se generan desde la base de cada usuario. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
+
+## Actualización R05 — Cierre técnico Fase 7
+
+La política `R05_CARRIER_TIMESTAMP_UNVERIFIABLE_V1` mantiene el histórico de fechas en RAW y AUDIT, y sustituye con `NULL` en CLEAN sólo las fechas de transportista involucradas en cronologías contradictorias. La vista `clean.orders_temporal_quality` diferencia los `NULL` de origen de los causados por la política. **No se inventan fechas ni se marcan las 189 anomalías originales como aprobadas**. La validación mantiene un control crítico de correspondencia RAW/CLEAN/AUDIT y publica la cifra original como advertencia.
+
+Consulta **[el tutorial de cierre de Fase 7](docs/FASE_7_CIERRE_POLITICA_TEMPORAL.md)** antes de ejecutar:
+
+```powershell
+conda activate olist-quality
+python -m pytest -q tests
+python -m src.transform
+python -m src.validate
+python -m src.release
+python -m src.release --publish
+python -m src.verify_release
+```
+
+Cuando el gate aprueba, la salida incluye los **nueve Parquet**, `release_manifest.json`, `quality_report.md` y el CSV auxiliar `temporal_quality_exceptions.csv`. Los datos reales se verifican en tu entorno; no se incluyen en el código distribuido.
 
 ## Objetivo y alcance
 
@@ -163,3 +181,20 @@ Los hallazgos reales aportados por el usuario para la Fase 5 (13/11/2026) fueron
 La puerta de Fase 6 distingue los `FAIL` originales de Fase 5 del posible dictamen preparatorio `READY_FOR_PHASE7_WITH_EXCEPTIONS`. Este último no cambia el resultado original, no corrige timestamps y no implica que las fuentes externas se hayan verificado: solamente permitiría estudiar la publicación en Fase 7, donde todavía harán falta los controles finales.
 
 Los registros de ejecución y decisiones se almacenan en `audit.pipeline_runs`, `audit.pipeline_steps` y `audit.temporal_review_assessments`. Las salidas están en `reports/quality_reports/phase6_*`. **Guía integral:** `docs/FASE_6_TUTORIAL.md`.
+
+
+## Fase 7 — Publicación Parquet controlada
+
+La publicación requiere que la Fase 5 y el gate de Fase 6 permitan continuar. **El estado real del dataset Olist analizado continúa `BLOCKED` por 189 eventos temporales sin aprobación**, por lo que el comando de exportación NO debe generar Parquet reales todavía.
+
+```powershell
+conda activate olist-quality
+python -m pytest -q tests
+python -m src.release                 # preflight, sin Parquet
+python -m src.release --publish       # intento explícito: sigue bloqueado hasta autorización
+python -m src.pipeline --no-figures --publish   # pipeline integral con publicación condicional
+```
+
+Tras una aprobación válida, el módulo exporta 9 Parquet ZSTD, compara filas y tipos leyendo cada uno, calcula SHA-256, crea `release_manifest.json` y el reporte `reports/quality_reports/phase7_quality_report.md`. En presencia de excepciones críticas aceptadas exige, además, una autorización manual de responsables de negocio y calidad vinculada a la huella de revisiones. Los CSV originales no se alteran.
+
+**Sobre Windows:** el intercambio del directorio `data/clean` usa renombrados y rollback ante excepciones; una caída eléctrica entre renombrados no proporciona atomicidad absoluta. Consultar `docs/FASE_7_TUTORIAL.md` para límites, recuperación y detalles de la política.

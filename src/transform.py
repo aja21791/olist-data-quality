@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from .config import DB_PATH, QUALITY_REPORTS_DIR, ROOT_DIR
 from .extract import qi
+from .temporal_policy import apply_temporal_policy, ensure_temporal_audit
 from .model_metadata import TABLE_SPECS, RELATIONSHIPS
 from .transform_schema import (
     SCHEMA, TIMESTAMPS, MONEYS, INTEGERS, DOUBLES,
@@ -39,7 +40,7 @@ RULES = (
     ('R02', 'Nulos', 'ALTA', 'Conservar faltantes opcionales; claves o valores críticos ausentes -> cuarentena'),
     ('R03', 'Estandarización de texto', 'MEDIA', 'Trim, espacios repetidos y mayúsculas/minúsculas sólo en campos descriptivos'),
     ('R04', 'Conversión de tipos', 'ALTA', 'TRY_CAST y cuarentena de valores no vacíos que no se convierten'),
-    ('R05', 'Fechas inconsistentes', 'MEDIA', 'No inventar fechas; conservar cronologías sospechosas y generar advertencias'),
+    ('R05', 'Fechas inconsistentes', 'MEDIA', 'Suprimir en CLEAN timestamps no verificables del transportista, preservando RAW y AUDIT'),
     ('R06', 'Precios inválidos', 'ALTA', 'Importes negativos/no interpretables -> cuarentena; ceros no se imputan'),
     ('R07', 'Valores atípicos IQR', 'BAJA', 'Sólo detectar; no capar ni eliminar extremos sin verificación externa'),
     ('R08', 'Normalización de categorías', 'MEDIA', 'Catálogo Olist original como correspondencia; no inventar traducciones'),
@@ -117,6 +118,7 @@ def init_audit(con):
         record_sha256 VARCHAR, column_name VARCHAR,
         old_value VARCHAR, new_value VARCHAR, changed_at TIMESTAMP
     )''')
+    ensure_temporal_audit(con)
     for code, name, severity, policy in RULES:
         # Catálogo idempotente; no eliminar los históricos de ejecución.
         if not con.execute('SELECT 1 FROM audit.quality_rule_catalog WHERE rule_id=?', [code]).fetchone():
@@ -349,9 +351,12 @@ def metric_rows(con, run_id: str):
                 'No se fuerza unicidad artificial; sólo campos obligatorios completos',
                 force_fail=missing_critical > 0)
 
-    add('R05', 'orders', run_sql(con, '05_fechas.sql')[0],
-        unresolved=run_sql(con, '05_fechas.sql')[0],
-        explanation='Secuencias imposibles o sospechosas conservadas y señaladas para investigación')
+    masked_events = con.execute('SELECT COUNT(*) FROM audit.temporal_policy_events WHERE transform_run_id=?', [run_id]).fetchone()[0]
+    residual_temporal = run_sql(con, '05_fechas.sql')[0]
+    add('R05', 'orders', masked_events + residual_temporal, masked_events, 0,
+        residual_temporal,
+        'Timestamp del transportista no verificable: NULL sólo en CLEAN; '
+        'fecha original y motivo en AUDIT. Las anomalías de origen siguen reportadas.')
     for table, field in sorted(MONEYS):
         negatives = run_sql(con, '06_precios.sql', table=table, column=field)[0]
         # R06 contabiliza negativos RAW convertibles y los negativos que quedan en CLEAN.
@@ -494,9 +499,15 @@ def transform_data(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR):
                     [run_id, now_utc()])
         con.execute('BEGIN TRANSACTION')
         try:
+            # La vista de calidad depende de CLEAN.orders: retirarla dentro de la
+            # transacción antes del CREATE OR REPLACE TABLE (reejecución idempotente).
+            con.execute('DROP VIEW IF EXISTS clean.orders_temporal_quality')
             for table in SCHEMA:
                 build_candidates(con, table, run_id)
                 LOG.info('CLEAN creado: %s', table)
+            temporal_result = apply_temporal_policy(con, run_id)
+            LOG.info('R05: eventos=%s; pedidos con timestamp enmascarado=%s',
+                     temporal_result['events'], temporal_result['orders_masked'])
             rules = metric_rows(con, run_id)
             overview = []
             for table in SCHEMA:
@@ -521,7 +532,7 @@ def transform_data(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR):
             raise
         report_path = write_reports(Path(report_dir), run_id, overview, rules, quarantine)
         return {'run_id':run_id, 'status':'COMPLETED', 'tables':overview,
-                'quarantine':quarantine, 'rules':rules, 'report':str(report_path)}
+                'quarantine':quarantine, 'rules':rules, 'report':str(report_path), 'temporal_policy':temporal_result}
     except Exception as exc:
         # La transacción deja sin cambios CLEAN previo; guardar razón del fallo por separado.
         try:

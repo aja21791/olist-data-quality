@@ -136,6 +136,10 @@ def decide_release_gate(validation: dict, review: dict) -> dict:
             unknown_failures.append(f'Control temporal no concilia: {name}')
     if review.get('stale_register_rows', 0):
         unknown_failures.append('Registro de revisión contiene decisiones de eventos inexistentes')
+    if review.get('policy_invalid_events', 0) or review.get('policy_missing_register', 0):
+        unknown_failures.append('Registro documental R05 desactualizado o incompleto: '
+                                f"invalidos={review.get('policy_invalid_events', 0)}, "
+                                f"faltantes={review.get('policy_missing_register', 0)}")
     status = ('BLOCKED' if unknown_failures or unresolved else
               'READY_FOR_PHASE7_WITH_EXCEPTIONS' if accepted else
               'READY_FOR_PHASE7')
@@ -145,6 +149,8 @@ def decide_release_gate(validation: dict, review: dict) -> dict:
         'phase5_raw_critical_failed_checks': raw_failures,
         'phase5_raw_warning_checks': int(validation['warning_checks']),
         'formally_accepted_temporal_events': accepted,
+        'policy_treated_events': review.get('policy_treated_events', 0),
+        'policy_source_investigation_pending': review.get('policy_source_investigation_pending', 0),
         'unresolved_critical_events': unresolved,
         'unexempted_critical_checks': unknown_failures,
         'temporal_check_details': counts_by_type,
@@ -205,7 +211,8 @@ def _export_gate(report_dir, pipeline_run_id, stages, validation, gate):
 
 def run_pipeline(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR, *,
                  input_dir=None, figures=True, validate_only=False,
-                 register_path=None) -> dict:
+                 register_path=None, publish_requested=False,
+                 authorization_path=None, clean_dir=None) -> dict:
     """Procesamiento repetible. BLOCKED se considera ejecución completa pero no publicable."""
     from .config import DATA_RAW_DIR
     db_path = Path(db_path)
@@ -245,14 +252,28 @@ def run_pipeline(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR, *,
         gate = _step(db_path, run_id, 'RELEASE_GATE',
                      lambda: decide_release_gate(validation, review))
         stages.append({'name': 'RELEASE_GATE', 'status': gate['status']})
+        release = None
+        final_status = gate['status']
+        if publish_requested:
+            # Importación diferida para evitar ciclo entre src.pipeline y src.release.
+            from .release import publish_validated
+            from .config import DATA_CLEAN_DIR
+            release = _step(db_path, run_id, 'PUBLICATION_PHASE7',
+                            lambda: publish_validated(
+                                db_path=db_path, report_dir=report_dir,
+                                clean_dir=clean_dir or DATA_CLEAN_DIR,
+                                validation=validation, review=review, gate=gate,
+                                authorization_path=authorization_path, publish=True))
+            final_status = release['status']
+            stages.append({'name': 'PUBLICATION_PHASE7', 'status': final_status})
         path = _export_gate(report_dir, run_id, stages, validation, gate)
-        _save_run(db_path, run_id, status=gate['status'],
+        _save_run(db_path, run_id, status=final_status,
                   validation_id=validation['validation_run_id'],
                   critical_failures=validation['critical_failures'],
                   unresolved=gate['unresolved_critical_events'])
-        outcome = {'pipeline_run_id': run_id, 'status': gate['status'],
+        outcome = {'pipeline_run_id': run_id, 'status': final_status,
                    'gate': gate, 'report': str(path), 'validation': validation,
-                   'review': review}
+                   'review': review, 'release': release}
         return outcome
     except Exception as exc:
         _save_run(db_path, run_id, status='FAILED', error=exc)
@@ -260,26 +281,32 @@ def run_pipeline(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR, *,
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fase 6 Olist: orquestar ETL y control de excepciones, sin Parquet')
+    parser = argparse.ArgumentParser(description='Olist: ETL con control de calidad; publicar sólo con --publish y gate conforme')
     parser.add_argument('--db', type=Path, default=DB_PATH)
     parser.add_argument('--reports', type=Path, default=QUALITY_REPORTS_DIR)
     parser.add_argument('--input', type=Path, default=None, help='Ruta de los nueve CSV originales')
     parser.add_argument('--register', type=Path, default=None, help='CSV de revisión temporal aprobado manualmente')
     parser.add_argument('--no-figures', action='store_true')
     parser.add_argument('--validate-only', action='store_true', help='Revalidar CLEAN sin repetir extracción/transformación')
+    parser.add_argument('--publish', action='store_true', help='Fase 7: solicitar publicación Parquet (sujeta a gate)')
+    parser.add_argument('--authorization', type=Path, default=None, help='Autorización externa de excepciones aceptadas')
+    parser.add_argument('--output', type=Path, default=None, help='Directorio data/clean para Parquet')
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(levelname)s | %(message)s')
     try:
         result = run_pipeline(db_path=arguments.db, report_dir=arguments.reports,
                               input_dir=arguments.input, figures=not arguments.no_figures,
                               validate_only=arguments.validate_only,
-                              register_path=arguments.register)
+                              register_path=arguments.register,
+                              publish_requested=arguments.publish,
+                              authorization_path=arguments.authorization,
+                              clean_dir=arguments.output)
     except Exception as exc:
         print(f'[ERROR] Fallo técnico: {exc}')
         raise SystemExit(1) from exc
     print(f"\n[FASE 6] {result['status']}")
     print('[INFORME]', result['report'])
-    print('[IMPORTANTE] No se publicó ningún archivo Parquet.')
+    print('[PARQUET]', 'Publicado' if result.get('release') and result['release'].get('published') else 'No publicado')
     if result['status'] == 'BLOCKED':
         print('[BLOQUEADO] Existen anomalías críticas sin resolver o aprobación documental incompleta.')
         raise SystemExit(2)

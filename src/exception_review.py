@@ -190,21 +190,70 @@ def assess_temporal_exceptions(db_path=DB_PATH, report_dir=QUALITY_REPORTS_DIR,
     report_dir = Path(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     register = Path(register_path) if register_path else report_dir / REGISTER_NAME
+    from .temporal_policy import load_treated_events
     current = load_temporal_events(db_path)
+    treated = load_treated_events(db_path)
+    treated_index = {(r['order_id'], r['tipo_anomalia']): r for r in treated}
+    current_keys = {(r['order_id'], r['tipo_anomalia']) for r in current}
+    if current_keys & set(treated_index):
+        raise ValueError('La misma anomalía aparece sin tratar en CLEAN y tratada en AUDIT')
     created = not register.exists()
     if created:
-        _write_csv(register, current, REGISTER_FIELDS)
+        # Registro histórico PENDIENTE. No constituye aprobación automática.
+        _write_csv(register, sorted(current + treated,
+                    key=lambda x: (x['order_id'], x['tipo_anomalia'])), REGISTER_FIELDS)
     registered = _read_register(register)
-    result = review_events(current, registered)
+    registered_keys = [(r['order_id'], r['tipo_anomalia']) for r in registered]
+    if len(registered_keys) != len(set(registered_keys)):
+        raise ValueError('Claves duplicadas en el registro de revisión temporal')
+    unresolved_register = [r for r in registered
+                           if (r['order_id'], r['tipo_anomalia']) not in treated_index]
+    result = review_events(current, unresolved_register)
+    masked_details = []
+    matched, invalid, registered_masked = 0, 0, set()
+    for saved in registered:
+        key = (saved['order_id'], saved['tipo_anomalia'])
+        event = treated_index.get(key)
+        if event is None:
+            continue
+        registered_masked.add(key)
+        valid = snapshot_fingerprint(event) == snapshot_fingerprint(saved)
+        if valid:
+            matched += 1
+        else:
+            invalid += 1
+        masked_details.append(dict(
+            order_id=event['order_id'], tipo_anomalia=event['tipo_anomalia'],
+            check_id=EVENT_TYPES[event['tipo_anomalia']],
+            prioridad_revision=event['prioridad_revision'],
+            decision='TRATADA_R05' if valid else 'AUDITORIA_DESACTUALIZADA',
+            note=('Timestamp de transportista no verificable, NULL sólo en CLEAN; '
+                  'fecha original en RAW y AUDIT; investigación de fuente pendiente'
+                  if valid else 'Las fechas del registro ya no coinciden con la auditoría R05'),
+            source_sha256=snapshot_fingerprint(event),
+            reviewed_by=saved.get('revisado_por',''),
+            reviewed_at=saved.get('fecha_revision',''),
+            resolution=saved.get('resolucion',''),
+            evidence_source=saved.get('evidencia_fuente',''),
+            review_comments=saved.get('comentarios_revision','')))
+    missing = len(treated_index) - len(registered_masked)
+    result['policy_treated_events'] = len(treated_index)
+    result['policy_treated_registered'] = matched
+    result['policy_invalid_events'] = invalid
+    result['policy_missing_register'] = missing
+    result['policy_source_investigation_pending'] = sum(
+        1 for r in registered if (r['order_id'], r['tipo_anomalia']) in treated_index
+        and (r.get('estado_revision') or '').strip().upper() == 'PENDIENTE')
+    result['policy_treated_details'] = masked_details
     result['register_created'] = created
     result['register_path'] = str(register)
     result['evaluated_at_utc'] = datetime.now(timezone.utc).isoformat()
     _audit_review(db_path, result, pipeline_run_id or uuid4().hex)
-    _write_csv(report_dir / 'phase6_temporal_decisions.csv', result['details'],
+    _write_csv(report_dir / 'phase6_temporal_decisions.csv', result['details'] + masked_details,
                ('order_id', 'tipo_anomalia', 'check_id', 'prioridad_revision',
                 'decision', 'note', 'source_sha256', 'reviewed_by',
                 'reviewed_at', 'resolution', 'evidence_source', 'review_comments'))
-    exported = {k: v for k, v in result.items() if k != 'details'}
+    exported = {k: v for k, v in result.items() if k not in ('details','policy_treated_details')}
     (report_dir / 'phase6_temporal_review_summary.json').write_text(
         json.dumps(exported, ensure_ascii=False, indent=2), encoding='utf-8')
     return result

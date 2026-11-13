@@ -197,7 +197,11 @@ def test_phase6_integration_keeps_blocked_until_valid_review(tmp_path):
         writer.writeheader()
         writer.writerows(review_rows)
     two = run_pipeline(db_path=db, report_dir=report_dir, validate_only=True)
-    assert two['status'] == 'READY_FOR_PHASE7_WITH_EXCEPTIONS'
+    # Una manipulación manual de CLEAN no equivale a una transformación R05 auditada.
+    # La aprobación documental de la fecha NO puede exceptuar un fallo de auditoría.
+    assert two['status'] == 'BLOCKED'
+    assert two['gate']['formally_accepted_temporal_events'] == 1
+    assert 'V09.TEMPORAL_POLICY_AUDIT' in two['gate']['unexempted_critical_checks']
     assert two['validation']['status'] == 'BLOCKED'
     with duckdb.connect(str(db), read_only=True) as con:
         assert con.execute('SELECT COUNT(*) FROM audit.pipeline_runs').fetchone()[0] == 2
