@@ -1,6 +1,6 @@
 # Olist Data Quality — SQL + DuckDB + Python
 
-Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 y 2 (preparación, extracción a RAW y perfilado).** Este repositorio **no afirma** tener aún las 15 reglas implementadas ni el conjunto Olist procesado. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
+Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1, 2 y 3 (preparación, extracción a RAW y diagnóstico integral inicial).** Este repositorio **no afirma** tener aún las 15 reglas implementadas ni el conjunto Olist procesado. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
 
 ## Objetivo y alcance
 
@@ -16,7 +16,7 @@ No hay capa persistente STAGING. Las futuras etapas de transformación podrán u
 
 ## Guía paso a paso
 
-**Fase 1:** [`docs/FASE_1_TUTORIAL.md`](docs/FASE_1_TUTORIAL.md) (instalación de Windows 11). **Fase 2:** [`docs/FASE_2_TUTORIAL.md`](docs/FASE_2_TUTORIAL.md) (comprensión de datos, carga RAW y diagnóstico).
+**Fase 1:** [`docs/FASE_1_TUTORIAL.md`](docs/FASE_1_TUTORIAL.md) (instalación de Windows 11). **Fase 2:** [`docs/FASE_2_TUTORIAL.md`](docs/FASE_2_TUTORIAL.md) (comprensión de datos y carga RAW). **Fase 3:** [`docs/FASE_3_TUTORIAL.md`](docs/FASE_3_TUTORIAL.md) (diagnóstico integral, reporte inicial y gráficos).
 
 ### Inicio rápido (Miniconda Prompt, desde la carpeta del proyecto)
 
@@ -31,7 +31,8 @@ kaggle datasets download olistbr/brazilian-ecommerce -p data/raw --unzip
 python -m src.source_inventory
 python -m src.verify_setup --require-data
 python -m src.extract            # Fase 2: CSV -> RAW, sin limpiar
-python -m src.understand         # Fase 2: diccionario + diagnóstico RAW
+python -m src.understand         # Fase 2: diccionario + exploración de RAW
+python -m src.diagnose           # Fase 3: diagnóstico integral, CSV + gráficos + reporte inicial
 python -m pytest -q tests
 ```
 
@@ -53,9 +54,10 @@ Abrir VS Code con `code .`; seleccionar el intérprete `olist-quality` y el kern
 | `src/verify_setup.py` | Validación de instalación y archivos |
 | `src/model_metadata.py` | Hipótesis de claves, relaciones y granularidad que se verifican contra RAW |
 | `src/extract.py` | Carga transaccional, idempotente, a RAW sin modificar CSV |
-| `src/understand.py` | Perfilado de claves, referencias, vacíos, tipos, fechas y montos de RAW |
-| `notebooks/01_data_quality_etl.ipynb` | Notebook educativo con Fases 1 y 2; todo se ejecuta desde la primera celda |
-| `sql/profiling/` | Consultas SQL educativas de la Fase 2 |
+| `src/understand.py` | Exploración inicial de claves, referencias, vacíos, tipos, fechas y montos de RAW |
+| `src/diagnose.py` | Fase 3: diagnóstico integral de 15 temas, solo lectura y generación del reporte inicial |
+| `notebooks/01_data_quality_etl.ipynb` | Notebook educativo con Fases 1, 2 y 3; ejecutable en orden |
+| `sql/profiling/` | Consultas SQL de Fases 2 y 3 (duplicados, IQR, fechas, conciliación, estados, postales) |
 | `sql/transformations/` | 15 reglas SQL, por construir |
 | `sql/validations/` | Pruebas SQL sobre CLEAN, por construir |
 | `reports/quality_reports/` | Inventario de fuentes ahora; métricas comparativas después |
@@ -87,4 +89,11 @@ Cada regla tendrá diagnóstico de RAW, política documentada, SQL de transforma
 
 ## Limitaciones de esta entrega
 
-El paquete incluye el **código de Fase 2** para cargar RAW, generar diccionario y reportes de perfilado. Su ejecución sobre Olist real **depende de los CSV que descargues localmente**. No se han generado aquí cifras del dataset ni se afirma que tu base local esté cargada. CLEAN sigue pendiente, no se aplican todavía las 15 reglas y no se publican Parquet. Los scripts y la prueba de carga con datos sintéticos deben ejecutarse en tu entorno DuckDB.
+El paquete incluye el **código de Fases 1, 2 y 3** para cargar RAW, generar diccionario y diagnósticos integrales de calidad. Su ejecución sobre Olist real **depende de los CSV que descargues localmente**. No se han generado aquí cifras del dataset ni se afirma que tu base local esté cargada. El reporte de Fase 3 es el diagnóstico INICIAL, no el reporte final de calidad. CLEAN sigue pendiente, no se aplican todavía las 15 reglas y no se publican Parquet. Los scripts y la prueba de carga con datos sintéticos deben ejecutarse en tu entorno DuckDB.
+
+
+## Fase 3: entregables del diagnóstico inicial
+
+Después de `python -m src.diagnose`, revisar `reports/quality_reports/phase3_quality_report.md`, `phase3_issues.csv`, `phase3_kpis.csv`, `phase3_payment_summary.csv`, `phase3_outliers.csv`, `phase3_references.csv` y gráficos `reports/figures/phase3_*.png`. Cada tabla de métricas queda también en `phase3_*.csv`; `phase3_summary.json` consolida el resultado. No hay tablas modificadas ni tercera capa de datos.
+
+Si se produce un error gráfico, ejecutar `python -m src.diagnose --no-figures`. Las pruebas de Fase 3 usan datos sintéticos y no requieren Olist real.
