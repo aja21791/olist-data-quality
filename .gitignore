@@ -23,3 +23,7 @@ __pycache__/
 kaggle.json
 access_token
 .DS_Store
+
+# Salidas del notebook autónomo (incluyen datos reales y copias de práctica).
+resultados_simplificado/
+.jupyter_runtime/
