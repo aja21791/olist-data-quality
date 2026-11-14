@@ -1,6 +1,8 @@
+> **Última actualización (Fase 8):** evaluación final RAW vs CLEAN, diccionario, integridad del release y reporte de cierre. Consultar la sección "Fase 8" al final para el estado vigente del proyecto.
+
 # Olist Data Quality — SQL + DuckDB + Python
 
-Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 a 7, con política R05 de timestamps logísticos no verificables y publicación Parquet condicionada a validaciones críticas.** Las quince reglas están implementadas como SQL y orquestación Python. La ejecución de las pruebas sobre los CSV reales debe verificarse localmente; los reportes suministrados se generan desde la base de cada usuario. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
+Proyecto educativo de ingeniería y calidad de datos para Windows 11. **Estado del código: Fases 1 a 8, con política R05 de timestamps logísticos no verificables y publicación Parquet condicionada a validaciones críticas.** Las quince reglas están implementadas como SQL y orquestación Python. La ejecución de las pruebas sobre los CSV reales debe verificarse localmente; los reportes suministrados se generan desde la base de cada usuario. Los CSV originales se descargan desde Kaggle y se excluyen del control de versiones.
 
 ## Actualización R05 — Cierre técnico Fase 7
 
@@ -198,3 +200,38 @@ python -m src.pipeline --no-figures --publish   # pipeline integral con publicac
 Tras una aprobación válida, el módulo exporta 9 Parquet ZSTD, compara filas y tipos leyendo cada uno, calcula SHA-256, crea `release_manifest.json` y el reporte `reports/quality_reports/phase7_quality_report.md`. En presencia de excepciones críticas aceptadas exige, además, una autorización manual de responsables de negocio y calidad vinculada a la huella de revisiones. Los CSV originales no se alteran.
 
 **Sobre Windows:** el intercambio del directorio `data/clean` usa renombrados y rollback ante excepciones; una caída eléctrica entre renombrados no proporciona atomicidad absoluta. Consultar `docs/FASE_7_TUTORIAL.md` para límites, recuperación y detalles de la política.
+
+## Fase 8 — Evaluación final de calidad y cierre técnico (actualización vigente)
+
+> **Estado posterior a la política R05:** las menciones históricas de `BLOCKED` en capítulos de Fase 5, 6 y primera implementación de Fase 7 corresponden a la versión **anterior** al tratamiento temporal. Los reportes de la ejecución más reciente y el manifiesto son la referencia para conocer el estado actual. No deducir que el dataset está publicado sin verificar el manifiesto.
+
+El cierre se calcula **desde la BD DuckDB y los nueve Parquet publicados**, nunca a partir de un resultado teórico. La arquitectura permanece en dos capas: CSV originales → extracción Python+DuckDB → RAW → 15 reglas SQL → CLEAN → controles → Parquet y reporte. `audit` conserva la trazabilidad, no es una capa STAGING de datos.
+
+```powershell
+conda activate olist-quality
+python -m pytest -q tests
+python -m src.verify_release
+python -m src.evaluate --deep-compare
+# Alternativa de principio a fin, con evaluación sólo tras publicación aprobada:
+python -m src.pipeline --no-figures --publish --evaluate --deep-compare
+```
+
+Si la base CLEAN se reconstruyó después del manifiesto vigente, el evaluador **bloquea el cierre por release obsoleto**. Una nueva publicación solo puede hacerse con `python -m src.release --publish` si el gate aprueba.
+
+La Fase 8 crea, sin modificar RAW/CLEAN/Parquet:
+
+| Salida | Ubicación | Contenido |
+|---|---|---|
+| Informe final | `reports/quality_reports/phase8_final_report.md` | Evaluación, cifras, 15 reglas, R05, límites y recomendaciones |
+| Resumen JSON | `reports/quality_reports/phase8_summary.json` | IDs, dimensiones, publicación, diccionario, auditoría |
+| Métricas detalladas | `reports/quality_reports/phase8_quality_metrics.csv` | Cada chequeo y sus denominadores antes/después |
+| Resumen dimensional | `reports/quality_reports/phase8_dimension_summary.csv` | Seis dimensiones y tasas comparables dentro de cada una |
+| Catálogo de 15 reglas | `reports/quality_reports/phase8_rule_catalog.csv` | Política, severidad, detección y tratamiento |
+| Validaciones asociadas al release | `reports/quality_reports/phase8_validation_checks.csv` | PASS, WARNING, FAIL con criterios y universos |
+| Casos temporales | `reports/quality_reports/phase8_temporal_events.csv` | Cantidades originales por clase de inconsistencia |
+| Diccionario | `reports/data_dictionary/phase8_data_dictionary.csv` | 52 campos, tipos, nulos, granularidad, relaciones |
+| Gráfica | `reports/figures/phase8_before_after_quality.png` | Calidad RAW vs CLEAN por dimensión |
+
+**Restricciones:** `--deep-compare` comprueba igualdad multiconjunto entre CLEAN y cada Parquet (incluidas multiplicidades de filas), además de verificaciones SHA-256, esquemas y conteos. Puede consumir más recursos; omítela únicamente si aceptas que la verificación estándar no compara los valores individualmente. Si los controles críticos no aprobaron, NO se generan estos informes de cierre. Los 189 eventos de la fuente se documentan pero no se declaran «corregidos» ni aprobados externamente.
+
+**Documentación:** [FASE_8_TUTORIAL.md](docs/FASE_8_TUTORIAL.md). También consultar el Notebook `notebooks/01_data_quality_etl.ipynb`, que ahora incorpora Fase 8 sin reimplementar consultas SQL manualmente.

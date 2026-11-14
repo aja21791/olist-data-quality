@@ -291,7 +291,15 @@ def main():
     parser.add_argument('--publish', action='store_true', help='Fase 7: solicitar publicación Parquet (sujeta a gate)')
     parser.add_argument('--authorization', type=Path, default=None, help='Autorización externa de excepciones aceptadas')
     parser.add_argument('--output', type=Path, default=None, help='Directorio data/clean para Parquet')
+    parser.add_argument('--evaluate', action='store_true',
+                        help='Fase 8: evaluar RAW/CLEAN/Parquet sólo tras publicación confirmada')
+    parser.add_argument('--deep-compare', action='store_true',
+                        help='Fase 8: comparar multiconjuntos de filas Parquet y CLEAN')
     arguments = parser.parse_args()
+    if arguments.evaluate and not arguments.publish:
+        parser.error('--evaluate requiere --publish; no se evalúa un release no publicado')
+    if arguments.deep_compare and not arguments.evaluate:
+        parser.error('--deep-compare requiere --evaluate')
     logging.basicConfig(level=logging.INFO, format='%(levelname)s | %(message)s')
     try:
         result = run_pipeline(db_path=arguments.db, report_dir=arguments.reports,
@@ -310,6 +318,22 @@ def main():
     if result['status'] == 'BLOCKED':
         print('[BLOQUEADO] Existen anomalías críticas sin resolver o aprobación documental incompleta.')
         raise SystemExit(2)
+    if arguments.evaluate:
+        if result['status'] != 'PUBLISHED':
+            print('[FASE 8][BLOQUEADO] El pipeline no publicó un release aprobado.')
+            raise SystemExit(2)
+        from .evaluate import evaluate_project
+        from .config import DATA_CLEAN_DIR, DICTIONARY_DIR
+        try:
+            final = evaluate_project(
+                db_path=arguments.db, parquet_dir=arguments.output or DATA_CLEAN_DIR,
+                report_dir=arguments.reports, dictionary_dir=DICTIONARY_DIR,
+                figures_dir=FIGURES_DIR, create_figures=not arguments.no_figures,
+                deep_compare=arguments.deep_compare)
+        except Exception as exc:
+            print(f'[FASE 8][ERROR] {exc}')
+            raise SystemExit(1) from exc
+        print(f"[FASE 8] {final['evaluation_status']} | {final['report']}")
 
 
 if __name__ == '__main__':
